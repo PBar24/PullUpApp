@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pull-Up Ladder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f0f0f;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .app {
+    width: 100%;
+    max-width: 400px;
+    padding: 24px;
+    text-align: center;
+  }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: 2px; color: #aaa; text-transform: uppercase; margin-bottom: 4px; }
+  .subtitle { color: #555; font-size: 13px; margin-bottom: 32px; }
+
+  .big-circle {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    margin: 0 auto 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 4px solid #333;
+    background: #1a1a1a;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .big-circle.active { border-color: #4ade80; background: #0d2016; }
+  .big-circle.resting { border-color: #facc15; background: #1a1500; }
+  .big-circle.ready { border-color: #60a5fa; background: #0a1628; }
+
+  .phase-label { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 4px; }
+  .big-number { font-size: 72px; font-weight: 800; line-height: 1; }
+  .big-circle.active .big-number { color: #4ade80; }
+  .big-circle.resting .big-number { color: #facc15; }
+  .big-circle.ready .big-number { color: #60a5fa; }
+  .unit { font-size: 14px; color: #666; margin-top: 4px; }
+
+  .rung-info { margin-bottom: 24px; }
+  .rung-label { font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+  .rung-value { font-size: 32px; font-weight: 700; color: #fff; }
+
+  .history {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+    min-height: 36px;
+  }
+  .rung-badge {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    background: #4ade80; color: #000;
+  }
+  .rung-badge.descent { background: #a78bfa; color: #000; }
+
+  .phase-banner {
+    font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 16px; padding: 6px 16px;
+    border-radius: 20px; display: inline-block;
+  }
+  .phase-banner.up { background: #0d2016; color: #4ade80; border: 1px solid #4ade80; }
+  .phase-banner.down { background: #1a0d2e; color: #a78bfa; border: 1px solid #a78bfa; }
+  .big-circle.descent-active { border-color: #a78bfa; background: #1a0d2e; }
+  .big-circle.descent-active .big-number { color: #a78bfa; }
+  .big-circle.descent-resting { border-color: #facc15; background: #1a1500; }
+
+  .btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    border: none;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-green { background: #4ade80; color: #000; }
+  .btn-red { background: #ef4444; color: #fff; }
+  .btn:disabled { opacity: 0.3; cursor: default; }
+
+  .summary { background: #1a1a1a; border-radius: 16px; padding: 20px; margin-top: 12px; }
+  .summary h2 { font-size: 18px; margin-bottom: 16px; color: #4ade80; }
+  .stat { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
+  .stat span:last-child { font-weight: 700; color: #fff; }
+  .stat span:first-child { color: #888; }
+
+  .rest-setting {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; margin-bottom: 28px; color: #888; font-size: 14px;
+  }
+  .rest-setting input {
+    width: 64px; background: #1a1a1a; border: 1px solid #333;
+    color: #fff; text-align: center; border-radius: 8px;
+    padding: 6px; font-size: 18px; font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Pull-Up Ladder</h1>
+  <p class="subtitle">1, 2, 3... until failure, then back down with 40s rest</p>
+
+  <!-- Setup -->
+  <div id="setup-view">
+    <div class="rest-setting">
+      <span>Up rest:</span>
+      <input type="number" id="rest-input" value="20" min="5" max="300" />
+      <span>sec</span>
+    </div>
+    <div class="rest-setting">
+      <span>Down rest:</span>
+      <input type="number" id="rest-descent-input" value="40" min="5" max="300" />
+      <span>sec</span>
+    </div>
+    <div class="big-circle ready">
+      <div class="phase-label">Ready</div>
+      <div class="big-number" style="font-size:40px;color:#60a5fa">GO</div>
+    </div>
+    <div class="rung-info">
+      <div class="rung-label">Starting rung</div>
+      <div class="rung-value">1 pull-up</div>
+    </div>
+    <div class="history"></div>
+    <button class="btn btn-green" onclick="startWorkout()">START WORKOUT</button>
+  </div>
+
+  <!-- Active -->
+  <div id="active-view" style="display:none">
+    <div id="phase-banner" class="phase-banner up">↑ Ascending</div>
+    <div class="big-circle active" id="circle">
+      <div class="phase-label" id="phase-label">DO IT</div>
+      <div class="big-number" id="big-number">1</div>
+      <div class="unit" id="unit">pull-up</div>
+    </div>
+    <div class="rung-info">
+      <div class="rung-label" id="rung-label">Current rung</div>
+      <div class="rung-value" id="rung-display">1 pull-up</div>
+    </div>
+    <div class="history" id="history"></div>
+    <button class="btn btn-green" id="done-btn" onclick="completedSet()">DONE</button>
+    <button class="btn btn-red" onclick="failedSet()">FAILED / STOP</button>
+  </div>
+
+  <!-- Between phases rest -->
+  <div id="transition-view" style="display:none">
+    <div id="phase-banner-t" class="phase-banner up">ASCENT COMPLETE</div>
+    <div class="big-circle ready">
+      <div class="phase-label">REST</div>
+      <div class="big-number" style="font-size:40px;color:#60a5fa">REST</div>
+    </div>
+    <div class="rung-info">
+      <div class="rung-label">Take your time</div>
+      <div class="rung-value" id="transition-rung">7 pull-ups</div>
+    </div>
+    <div class="history" id="transition-history"></div>
+    <button class="btn btn-green" onclick="startDescent()" style="background:#a78bfa;color:#000">START DESCENT</button>
+    <button class="btn btn-red" onclick="showSummary()">STOP WORKOUT</button>
+  </div>
+
+  <!-- Summary -->
+  <div id="summary-view" style="display:none">
+    <div class="summary">
+      <h2>Workout Complete!</h2>
+      <div class="stat"><span>Rungs completed</span><span id="s-rungs">—</span></div>
+      <div class="stat"><span>Max pull-ups in a set</span><span id="s-max">—</span></div>
+      <div class="stat"><span>Total pull-ups</span><span id="s-total">—</span></div>
+    </div>
+    <div class="history" id="summary-history" style="margin-top:20px;margin-bottom:20px;"></div>
+    <button class="btn btn-green" onclick="resetWorkout()">NEW WORKOUT</button>
+  </div>
+</div>
+
+<script>
+  let state = 'idle';
+  let rung = 1;
+  let phase = 'up'; // 'up' or 'down'
+  let restSeconds = 20;
+  let descentRest = 40;
+  let timer = null;
+  let timeLeft = 0;
+  let completedRungs = [];
+
+  function startWorkout() {
+    restSeconds = parseInt(document.getElementById('rest-input').value) || 20;
+    descentRest = parseInt(document.getElementById('rest-descent-input').value) || 40;
+    rung = 1; phase = 'up'; completedRungs = [];
+    document.getElementById('setup-view').style.display = 'none';
+    document.getElementById('active-view').style.display = 'block';
+    showDoPhase();
+  }
+
+  function currentRest() {
+    return phase === 'up' ? restSeconds : descentRest;
+  }
+
+  function showDoPhase() {
+    state = 'doing';
+    clearInterval(timer);
+    const isDown = phase === 'down';
+    document.getElementById('phase-banner').textContent = isDown ? 'DESCENDING' : 'ASCENDING';
+    document.getElementById('phase-banner').className = 'phase-banner ' + (isDown ? 'down' : 'up');
+    document.getElementById('circle').className = 'big-circle ' + (isDown ? 'descent-active' : 'active');
+    document.getElementById('phase-label').textContent = 'DO IT';
+    document.getElementById('big-number').textContent = rung;
+    document.getElementById('unit').textContent = rung === 1 ? 'pull-up' : 'pull-ups';
+    document.getElementById('rung-label').textContent = 'Current rung';
+    document.getElementById('rung-display').textContent = rung + (rung === 1 ? ' pull-up' : ' pull-ups');
+    document.getElementById('done-btn').disabled = false;
+    updateHistory();
+  }
+
+  function completedSet() {
+    completedRungs.push({ rung, status: 'done', phase });
+    if (phase === 'up') {
+      rung++;
+    } else {
+      rung--;
+      if (rung < 1) { showSummary(); return; }
+    }
+    updateHistory();
+    startRest();
+  }
+
+  function failedSet() {
+    clearInterval(timer);
+    if (state === 'doing' && phase === 'up') {
+      const failedRung = rung;
+      completedRungs.push({ rung: failedRung, status: 'failed', phase: 'up' });
+      // Show transition rest screen
+      document.getElementById('active-view').style.display = 'none';
+      document.getElementById('transition-view').style.display = 'block';
+      document.getElementById('transition-rung').textContent = 'Descent starts at ' + failedRung + (failedRung === 1 ? ' pull-up' : ' pull-ups');
+      document.getElementById('transition-history').innerHTML = completedRungs.map(r => {
+        let cls = r.status === 'failed' ? 'failed' : (r.phase === 'down' ? 'descent' : '');
+        return `<div class="rung-badge ${cls}">${r.rung}</div>`;
+      }).join('');
+      // Store the descent start rung
+      window._descentStart = failedRung;
+    } else {
+      showSummary();
+    }
+  }
+
+  function startDescent() {
+    phase = 'down';
+    rung = window._descentStart;
+    document.getElementById('transition-view').style.display = 'none';
+    document.getElementById('active-view').style.display = 'block';
+    showDoPhase();
+  }
+
+  function startRest() {
+    state = 'resting';
+    timeLeft = currentRest();
+    const isDown = phase === 'down';
+    document.getElementById('circle').className = 'big-circle resting';
+    document.getElementById('phase-label').textContent = 'REST';
+    document.getElementById('big-number').textContent = timeLeft;
+    document.getElementById('unit').textContent = 'seconds';
+    document.getElementById('rung-label').textContent = 'Next rung';
+    document.getElementById('rung-display').textContent = rung + (rung === 1 ? ' pull-up' : ' pull-ups');
+    document.getElementById('done-btn').disabled = true;
+
+    timer = setInterval(() => {
+      timeLeft--;
+      document.getElementById('big-number').textContent = timeLeft;
+      if (timeLeft <= 0) { clearInterval(timer); showDoPhase(); }
+    }, 1000);
+  }
+
+  function showSummary() {
+    document.getElementById('active-view').style.display = 'none';
+    document.getElementById('summary-view').style.display = 'block';
+    const done = completedRungs.filter(r => r.status === 'done');
+    const total = completedRungs.filter(r => r.status === 'done').reduce((s, r) => s + r.rung, 0);
+    const upDone = completedRungs.filter(r => r.status === 'done' && r.phase === 'up');
+    const max = upDone.length > 0 ? Math.max(...upDone.map(r => r.rung)) : 0;
+    document.getElementById('s-rungs').textContent = done.length;
+    document.getElementById('s-max').textContent = max + (max === 1 ? ' pull-up' : ' pull-ups');
+    document.getElementById('s-total').textContent = total + ' pull-ups';
+    document.getElementById('summary-history').innerHTML = completedRungs.map(r => {
+      let cls = r.status === 'failed' ? 'failed' : (r.phase === 'down' ? 'descent' : '');
+      return `<div class="rung-badge ${cls}">${r.rung}</div>`;
+    }).join('');
+  }
+
+  function updateHistory() {
+    document.getElementById('history').innerHTML = completedRungs.map(r => {
+      let cls = r.status === 'failed' ? 'failed' : (r.phase === 'down' ? 'descent' : '');
+      return `<div class="rung-badge ${cls}">${r.rung}</div>`;
+    }).join('');
+  }
+
+  function resetWorkout() {
+    rung = 1; phase = 'up'; completedRungs = []; state = 'idle'; clearInterval(timer);
+    document.getElementById('summary-view').style.display = 'none';
+    document.getElementById('transition-view').style.display = 'none';
+    document.getElementById('setup-view').style.display = 'block';
+  }
+</script>
+</body>
+</html>
