@@ -22,7 +22,7 @@
   }
   h1 { font-size: 22px; font-weight: 700; letter-spacing: 2px; color: #aaa; text-transform: uppercase; margin-bottom: 4px; }
   .subtitle { color: #555; font-size: 13px; margin-bottom: 32px; }
-
+ 
   .big-circle {
     width: 200px;
     height: 200px;
@@ -39,18 +39,18 @@
   .big-circle.active { border-color: #4ade80; background: #0d2016; }
   .big-circle.resting { border-color: #facc15; background: #1a1500; }
   .big-circle.ready { border-color: #60a5fa; background: #0a1628; }
-
+ 
   .phase-label { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 4px; }
   .big-number { font-size: 72px; font-weight: 800; line-height: 1; }
   .big-circle.active .big-number { color: #4ade80; }
   .big-circle.resting .big-number { color: #facc15; }
   .big-circle.ready .big-number { color: #60a5fa; }
   .unit { font-size: 14px; color: #666; margin-top: 4px; }
-
+ 
   .rung-info { margin-bottom: 24px; }
   .rung-label { font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
   .rung-value { font-size: 32px; font-weight: 700; color: #fff; }
-
+ 
   .history {
     display: flex;
     justify-content: center;
@@ -67,7 +67,7 @@
     background: #4ade80; color: #000;
   }
   .rung-badge.descent { background: #a78bfa; color: #000; }
-
+ 
   .phase-banner {
     font-size: 13px; font-weight: 700; letter-spacing: 2px;
     text-transform: uppercase; margin-bottom: 16px; padding: 6px 16px;
@@ -78,7 +78,7 @@
   .big-circle.descent-active { border-color: #a78bfa; background: #1a0d2e; }
   .big-circle.descent-active .big-number { color: #a78bfa; }
   .big-circle.descent-resting { border-color: #facc15; background: #1a1500; }
-
+ 
   .btn {
     width: 100%;
     padding: 16px;
@@ -95,13 +95,13 @@
   .btn-green { background: #4ade80; color: #000; }
   .btn-red { background: #ef4444; color: #fff; }
   .btn:disabled { opacity: 0.3; cursor: default; }
-
+ 
   .summary { background: #1a1a1a; border-radius: 16px; padding: 20px; margin-top: 12px; }
   .summary h2 { font-size: 18px; margin-bottom: 16px; color: #4ade80; }
   .stat { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
   .stat span:last-child { font-weight: 700; color: #fff; }
   .stat span:first-child { color: #888; }
-
+ 
   .rest-setting {
     display: flex; align-items: center; justify-content: center;
     gap: 12px; margin-bottom: 28px; color: #888; font-size: 14px;
@@ -117,7 +117,7 @@
 <div class="app">
   <h1>Pull-Up Ladder</h1>
   <p class="subtitle">1, 2, 3... until failure, then back down with 40s rest</p>
-
+ 
   <!-- Setup -->
   <div id="setup-view">
     <div class="rest-setting">
@@ -141,7 +141,7 @@
     <div class="history"></div>
     <button class="btn btn-green" onclick="startWorkout()">START WORKOUT</button>
   </div>
-
+ 
   <!-- Active -->
   <div id="active-view" style="display:none">
     <div id="phase-banner" class="phase-banner up">↑ Ascending</div>
@@ -158,7 +158,7 @@
     <button class="btn btn-green" id="done-btn" onclick="completedSet()">DONE</button>
     <button class="btn btn-red" onclick="failedSet()">FAILED / STOP</button>
   </div>
-
+ 
   <!-- Between phases rest -->
   <div id="transition-view" style="display:none">
     <div id="phase-banner-t" class="phase-banner up">ASCENT COMPLETE</div>
@@ -174,7 +174,7 @@
     <button class="btn btn-green" onclick="startDescent()" style="background:#a78bfa;color:#000">START DESCENT</button>
     <button class="btn btn-red" onclick="showSummary()">STOP WORKOUT</button>
   </div>
-
+ 
   <!-- Summary -->
   <div id="summary-view" style="display:none">
     <div class="summary">
@@ -187,8 +187,53 @@
     <button class="btn btn-green" onclick="resetWorkout()">NEW WORKOUT</button>
   </div>
 </div>
-
+ 
 <script>
+  // ── Wake Lock ──────────────────────────────────────────────
+  let wakeLock = null;
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        document.addEventListener('visibilitychange', async () => {
+          if (wakeLock !== null && document.visibilityState === 'visible') {
+            wakeLock = await navigator.wakeLock.request('screen');
+          }
+        });
+      }
+    } catch (e) { /* silently fail if not supported */ }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  }
+ 
+  // ── Beep sound (Web Audio API) ─────────────────────────────
+  let audioCtx = null;
+  function ensureAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  function playBeep() {
+    try {
+      ensureAudioCtx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      // Three short beeps
+      [0, 0.18, 0.36].forEach(offset => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + offset);
+        gain.gain.setValueAtTime(1, audioCtx.currentTime + offset);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + offset + 0.15);
+        osc.start(audioCtx.currentTime + offset);
+        osc.stop(audioCtx.currentTime + offset + 0.15);
+      });
+    } catch(e) {}
+  }
+  // Unlock audio on first user interaction
+  document.addEventListener('click', () => ensureAudioCtx(), { once: true });
+ 
+  // ── State ──────────────────────────────────────────────────
   let state = 'idle';
   let rung = 1;
   let phase = 'up'; // 'up' or 'down'
@@ -197,20 +242,21 @@
   let timer = null;
   let timeLeft = 0;
   let completedRungs = [];
-
+ 
   function startWorkout() {
     restSeconds = parseInt(document.getElementById('rest-input').value) || 20;
     descentRest = parseInt(document.getElementById('rest-descent-input').value) || 40;
     rung = 1; phase = 'up'; completedRungs = [];
+    requestWakeLock();
     document.getElementById('setup-view').style.display = 'none';
     document.getElementById('active-view').style.display = 'block';
     showDoPhase();
   }
-
+ 
   function currentRest() {
     return phase === 'up' ? restSeconds : descentRest;
   }
-
+ 
   function showDoPhase() {
     state = 'doing';
     clearInterval(timer);
@@ -226,7 +272,7 @@
     document.getElementById('done-btn').disabled = false;
     updateHistory();
   }
-
+ 
   function completedSet() {
     completedRungs.push({ rung, status: 'done', phase });
     if (phase === 'up') {
@@ -238,7 +284,7 @@
     updateHistory();
     startRest();
   }
-
+ 
   function failedSet() {
     clearInterval(timer);
     if (state === 'doing' && phase === 'up') {
@@ -258,7 +304,7 @@
       showSummary();
     }
   }
-
+ 
   function startDescent() {
     phase = 'down';
     rung = window._descentStart;
@@ -266,7 +312,7 @@
     document.getElementById('active-view').style.display = 'block';
     showDoPhase();
   }
-
+ 
   function startRest() {
     state = 'resting';
     timeLeft = currentRest();
@@ -278,21 +324,23 @@
     document.getElementById('rung-label').textContent = 'Next rung';
     document.getElementById('rung-display').textContent = rung + (rung === 1 ? ' pull-up' : ' pull-ups');
     document.getElementById('done-btn').disabled = true;
-
+ 
     timer = setInterval(() => {
       timeLeft--;
       document.getElementById('big-number').textContent = timeLeft;
-      if (timeLeft <= 0) { clearInterval(timer); showDoPhase(); }
+      if (timeLeft <= 0) { clearInterval(timer); playBeep(); showDoPhase(); }
     }, 1000);
   }
-
+ 
   function showSummary() {
+    releaseWakeLock();
     document.getElementById('active-view').style.display = 'none';
     document.getElementById('summary-view').style.display = 'block';
     const done = completedRungs.filter(r => r.status === 'done');
-    const total = completedRungs.filter(r => r.status === 'done').reduce((s, r) => s + r.rung, 0);
-    const upDone = completedRungs.filter(r => r.status === 'done' && r.phase === 'up');
-    const max = upDone.length > 0 ? Math.max(...upDone.map(r => r.rung)) : 0;
+    const total = done.reduce((s, r) => s + r.rung, 0);
+    // Max is the highest rung successfully completed (ascent only, since descent starts lower)
+    const allDoneRungs = done.map(r => r.rung);
+    const max = allDoneRungs.length > 0 ? Math.max(...allDoneRungs) : 0;
     document.getElementById('s-rungs').textContent = done.length;
     document.getElementById('s-max').textContent = max + (max === 1 ? ' pull-up' : ' pull-ups');
     document.getElementById('s-total').textContent = total + ' pull-ups';
@@ -301,14 +349,14 @@
       return `<div class="rung-badge ${cls}">${r.rung}</div>`;
     }).join('');
   }
-
+ 
   function updateHistory() {
     document.getElementById('history').innerHTML = completedRungs.map(r => {
       let cls = r.status === 'failed' ? 'failed' : (r.phase === 'down' ? 'descent' : '');
       return `<div class="rung-badge ${cls}">${r.rung}</div>`;
     }).join('');
   }
-
+ 
   function resetWorkout() {
     rung = 1; phase = 'up'; completedRungs = []; state = 'idle'; clearInterval(timer);
     document.getElementById('summary-view').style.display = 'none';
@@ -318,3 +366,4 @@
 </script>
 </body>
 </html>
+ 
